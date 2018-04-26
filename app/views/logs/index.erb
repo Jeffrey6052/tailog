@@ -2,34 +2,22 @@
 
   <% raise RuntimeError, "Tailog.log_path is not present!" unless Tailog.log_path %>
 
-  <% if params[:file] %>
-    <% file_path = File.join Tailog.log_path, params[:file] %>
+  <% 
+    if params[:file] 
+      file_path = File.join Tailog.log_path, params[:file]
+    else
+      file_path = Tailog.log_path
+    end
+    isDirectory = File.directory?(file_path)
+    isFile = File.file?(file_path)
+  %>
+
+  <% if isFile %>
     <h3 class="page-header"><%= file_path %></h3>
 
     <% File.open file_path do |file| %>
       <div id="content" class="content content-hover"></div>
     <% end %>
-
-    <a id="settings-toggle" class="btn btn-primary fixed-top-right"><i class="glyphicon glyphicon-cog"></i></a>
-
-    <div id="settings-panel" class="panel panel-info fixed-top-right settings-panel hidden">
-      <div class="panel-heading">Settings</div>
-      <div class="panel-body">
-        <div class="form-group btn-group">
-          <a id="add-divider" class="btn btn-default">Add Divider</a>
-          <a id="clear-logs" class="btn btn-default">Clear Logs</a>
-        </div>
-        <div class="form-group">
-          <div class="input-group">
-            <input id="highlight" type="text" class="form-control" placeholder="Keyword">
-            <span class="input-group-btn">
-              <button id="add-highlight" class="btn btn-default" type="button">Highlight!</button>
-            </span>
-          </div>
-          <div id="highlight-list" class="highlight-list"></div>
-        </div>
-      </div>
-    </div>
 
     <script type="text/javascript">
       String.prototype.hashCode = function(){
@@ -150,8 +138,8 @@
       loadMore();
     </script>
 
-  <% else %>
-    <table class="table table-striped table-hover data-tables">
+  <% elsif isDirectory %>
+    <table class="table table-striped table-hover">
       <thead>
         <tr>
           <th>File name</th>
@@ -160,58 +148,53 @@
         </tr>
       </thead>
       <tbody>
-        <% Dir[File.join Tailog.log_path, '**/*.log'].each do |file| %>
-          <% relative_file = Pathname.new(file).relative_path_from(Pathname.new(Tailog.log_path)) %>
-          <% stat = File.stat(file) %>
+        <%
+          tmpRecords = []
+          Dir[File.join(file_path, "*")].each do |file|
+
+            relative_file = Pathname.new(file).relative_path_from(Pathname.new(Tailog.log_path))
+            stat = File.stat(file)
+
+            isFile = File.file?(file)
+
+            mtime = stat.mtime
+            size = isFile ? stat.size : 0
+            tmpRecords.push({relative_file: relative_file, mtime: mtime, size: size, is_file: isFile})
+          end
+
+          tmpRecords = tmpRecords.sort {|x, y| x[:mtime].to_i <=> y[:mtime].to_i }.reverse
+        %>
+
+
+        <% 
+          tmpRecords.each do |record| 
+            relative_file = record[:relative_file]
+            size = record[:size]
+            mtime = record[:mtime]
+            is_file = record[:is_file]
+        %>
 
           <tr>
             <td>
-              <a href="?file=<%= relative_file %>"><%= file %></a>
+              <a href="?file=<%= relative_file %>"><%= relative_file %></a>
+              <% if relative_file.to_s[-4, 4] == ".log" %>
               <a href="logs/download?file=<%= relative_file %>" download>
                 <span class="glyphicon glyphicon-download-alt"></span>
               </a>
+              <% end %>
             </td>
             <td>
-              <%= stat.size.to_filesize %>
+              <%= is_file ? size : 0 %>
             </td>
             <td>
-              <%= stat.mtime %>
+              <%= mtime %>
             </td>
           </tr>
         <% end %>
       </tbody>
     </table>
-
-    <div class="btn-group filter-btn-group" id="filter-btn-group">
-      <a id="recent-motified" class="btn btn-default">Recent Motified</a>
-      <a id="non-blank" class="btn btn-default">Non Blank</a>
-    </div>
   <% end %>
 
-  <script type="text/javascript">
-    $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-      var recentMotified = $('#recent-motified').hasClass('active');
-      var nonBlank = $('#non-blank').hasClass('active');
-
-      if (recentMotified && Date.now() - Date.parse(data[2]) > 3 * 24 * 60 * 60 * 1000) {
-        return false;
-      }
-
-      if (nonBlank && data[1] === '0.0B') {
-        return false;
-      }
-
-      return true;
-    });
-
-    $('.data-tables').on('init.dt', function() {
-      $('.dataTables_filter').prepend($('#filter-btn-group'));
-      $('#filter-btn-group a').click(function() {
-        $(this).toggleClass('active');
-        $('.data-tables').DataTable().draw();
-      });
-    });
-  </script>
 
 <% rescue => error %>
   <%= erb :error, locals: { error: error }, layout: false %>
