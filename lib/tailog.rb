@@ -60,9 +60,13 @@ module Tailog
     post '/logs' do
       begin
         file_path = File.join Tailog.log_path, params[:file]
+
+        tailNum = params[:tail].to_i
+        tailNum = 200 if tailNum <= 0
+
         file = File.open file_path
         file_size = file.size
-        tail = file.tail(200).join("\n")
+        tail = file.tail(tailNum).join("\n")
 
         content = erb :'logs/list', locals: { file: tail }, layout: false
         file.close
